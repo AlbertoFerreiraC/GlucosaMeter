@@ -57,6 +57,7 @@ public class GlucoseMeterReader {
                 writer.write("Inicializando dispositivo...\n");
                 if (!sendCommand(device, INIT_COMMAND, writer)) {
                     writer.write("Error en la inicialización\n");
+                    System.out.println("Error en la inicialización\n");
                     return;
                 }
                 Thread.sleep(1000);
