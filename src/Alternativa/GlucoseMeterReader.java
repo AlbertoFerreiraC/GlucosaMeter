@@ -133,7 +133,7 @@ public class GlucoseMeterReader extends JFrame {
                     readButton.setEnabled(true);
                 }
             }
-        };
+        }; /*Prueba para push*/
         worker.execute();
     }
 
