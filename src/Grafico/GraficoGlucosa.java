@@ -59,10 +59,31 @@ public class GraficoGlucosa extends javax.swing.JFrame {
     public GraficoGlucosa() {
         initComponents();
         setLocationRelativeTo(null);
-        String ids[] = {"Seleccionar", "Id", "Fecha de Lectura", "Rango normal mg/dl", "Nivel de glucosa mg/dl"};
-        mt.setColumnIdentifiers(ids);
+         // Configurar el modelo de tabla con el tipo correcto para la columna del checkbox
+        String[] columnNames = {"Seleccionar", "Id", "Fecha de Lectura", "Nivel de glucosa mg/dl"};
+        mt = new DefaultTableModel(columnNames, 0) {
+            @Override
+            public Class<?> getColumnClass(int columnIndex) {
+                // Especificar que la primera columna es de tipo Boolean
+                if (columnIndex == 0) {
+                    return Boolean.class;
+                }
+                return Object.class;
+            }
+            
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                // Solo permitir edición en la columna del checkbox
+                return column == 0;
+            }
+        };
 
         tableModel.setModel(mt);
+        
+        // Configurar el renderizador para la columna del checkbox
+        tableModel.getColumnModel().getColumn(0).setPreferredWidth(85);
+        tableModel.getColumnModel().getColumn(0).setResizable(false);
+
 
         // Inicializar HID y configurar eventos
         initializeHID();
