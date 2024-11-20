@@ -81,7 +81,7 @@ public class GraficoGlucosa extends javax.swing.JFrame {
         tableModel.setModel(mt);
         
         // Configurar el renderizador para la columna del checkbox
-        tableModel.getColumnModel().getColumn(0).setPreferredWidth(85);
+        tableModel.getColumnModel().getColumn(0).setPreferredWidth(45);
         tableModel.getColumnModel().getColumn(0).setResizable(false);
 
 
