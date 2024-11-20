@@ -5,7 +5,24 @@
  */
 package Grafico;
 
+import Conexion.Conexion;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.List;
+import javax.swing.JOptionPane;
+import javax.swing.SwingWorker;
 import javax.swing.table.DefaultTableModel;
+import org.hid4java.HidDevice;
+import org.hid4java.HidManager;
+import org.hid4java.HidServices;
 
 /**
  *
@@ -22,13 +39,34 @@ public class GraficoGlucosa extends javax.swing.JFrame {
     private static final byte[] REQUEST_DATA = {0x51, 0x26, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
     private static final int PACKET_SIZE = 64;
 
+    private HidServices hidServices;
+    private HidDevice hidDevice;
+
+    // Definición de la clase GlucoseReading como clase estática interna
+    private static class GlucoseReading {
+
+        int id;
+        Date timestamp;
+        int value;
+
+        GlucoseReading(int id, Date timestamp, int value) {
+            this.id = id;
+            this.timestamp = timestamp;
+            this.value = value;
+        }
+    }
+
     public GraficoGlucosa() {
         initComponents();
         setLocationRelativeTo(null);
         String ids[] = {"Seleccionar", "Id", "Fecha de Lectura", "Rango normal mg/dl", "Nivel de glucosa mg/dl"};
         mt.setColumnIdentifiers(ids);
 
-        jTable1.setModel(mt);
+        tableModel.setModel(mt);
+
+        // Inicializar HID y configurar eventos
+        initializeHID();
+        setupEventHandlers();
     }
 
     /**
@@ -42,28 +80,28 @@ public class GraficoGlucosa extends javax.swing.JFrame {
 
         jPanel1 = new javax.swing.JPanel();
         jLabel1 = new javax.swing.JLabel();
-        jButton3 = new javax.swing.JButton();
+        insertButton = new javax.swing.JButton();
         jLabel2 = new javax.swing.JLabel();
-        jLabel3 = new javax.swing.JLabel();
-        jButton1 = new javax.swing.JButton();
+        statusLabel = new javax.swing.JLabel();
+        readButton = new javax.swing.JButton();
         jInternalFrame1 = new javax.swing.JInternalFrame();
         jScrollPane1 = new javax.swing.JScrollPane();
-        jTable1 = new javax.swing.JTable();
+        tableModel = new javax.swing.JTable();
         jButton5 = new javax.swing.JButton();
-        jButton2 = new javax.swing.JButton();
+        btnActualizar = new javax.swing.JButton();
         jLabel9 = new javax.swing.JLabel();
 
         setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
 
         jLabel1.setIcon(new javax.swing.ImageIcon(getClass().getResource("/Grafico/DiseñoLogo.jpg"))); // NOI18N
 
-        jButton3.setBackground(new java.awt.Color(204, 204, 204));
-        jButton3.setFont(new java.awt.Font("Tahoma", 1, 11)); // NOI18N
-        jButton3.setText("Insertar");
-        jButton3.setBorder(javax.swing.BorderFactory.createBevelBorder(javax.swing.border.BevelBorder.RAISED));
-        jButton3.addActionListener(new java.awt.event.ActionListener() {
+        insertButton.setBackground(new java.awt.Color(204, 204, 204));
+        insertButton.setFont(new java.awt.Font("Tahoma", 1, 11)); // NOI18N
+        insertButton.setText("Insertar");
+        insertButton.setBorder(javax.swing.BorderFactory.createBevelBorder(javax.swing.border.BevelBorder.RAISED));
+        insertButton.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent evt) {
-                jButton3ActionPerformed(evt);
+                insertButtonActionPerformed(evt);
             }
         });
 
@@ -71,23 +109,23 @@ public class GraficoGlucosa extends javax.swing.JFrame {
         jLabel2.setHorizontalAlignment(javax.swing.SwingConstants.CENTER);
         jLabel2.setText("Estado:");
 
-        jLabel3.setFont(new java.awt.Font("Tahoma", 1, 12)); // NOI18N
-        jLabel3.setText("Desconectado");
+        statusLabel.setFont(new java.awt.Font("Tahoma", 1, 12)); // NOI18N
+        statusLabel.setText("Desconectado");
 
-        jButton1.setBackground(new java.awt.Color(204, 204, 204));
-        jButton1.setFont(new java.awt.Font("Tahoma", 1, 11)); // NOI18N
-        jButton1.setText("Leer");
-        jButton1.setBorder(javax.swing.BorderFactory.createBevelBorder(javax.swing.border.BevelBorder.RAISED));
-        jButton1.addActionListener(new java.awt.event.ActionListener() {
+        readButton.setBackground(new java.awt.Color(204, 204, 204));
+        readButton.setFont(new java.awt.Font("Tahoma", 1, 11)); // NOI18N
+        readButton.setText("Leer");
+        readButton.setBorder(javax.swing.BorderFactory.createBevelBorder(javax.swing.border.BevelBorder.RAISED));
+        readButton.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent evt) {
-                jButton1ActionPerformed(evt);
+                readButtonActionPerformed(evt);
             }
         });
 
         jInternalFrame1.setBorder(javax.swing.BorderFactory.createLineBorder(new java.awt.Color(204, 204, 204)));
         jInternalFrame1.setVisible(true);
 
-        jTable1.setModel(new javax.swing.table.DefaultTableModel(
+        tableModel.setModel(new javax.swing.table.DefaultTableModel(
             new Object [][] {
                 {null, null, null, null, null},
                 {null, null, null, null, null},
@@ -101,8 +139,8 @@ public class GraficoGlucosa extends javax.swing.JFrame {
                 "Title 1", "Title 3", "Title 4", "Título 4", "Título 5"
             }
         ));
-        jTable1.setAutoscrolls(false);
-        jScrollPane1.setViewportView(jTable1);
+        tableModel.setAutoscrolls(false);
+        jScrollPane1.setViewportView(tableModel);
 
         javax.swing.GroupLayout jInternalFrame1Layout = new javax.swing.GroupLayout(jInternalFrame1.getContentPane());
         jInternalFrame1.getContentPane().setLayout(jInternalFrame1Layout);
@@ -128,13 +166,13 @@ public class GraficoGlucosa extends javax.swing.JFrame {
             }
         });
 
-        jButton2.setBackground(new java.awt.Color(204, 204, 204));
-        jButton2.setFont(new java.awt.Font("Tahoma", 1, 11)); // NOI18N
-        jButton2.setText("Actualizar");
-        jButton2.setBorder(javax.swing.BorderFactory.createBevelBorder(javax.swing.border.BevelBorder.RAISED));
-        jButton2.addActionListener(new java.awt.event.ActionListener() {
+        btnActualizar.setBackground(new java.awt.Color(204, 204, 204));
+        btnActualizar.setFont(new java.awt.Font("Tahoma", 1, 11)); // NOI18N
+        btnActualizar.setText("Actualizar");
+        btnActualizar.setBorder(javax.swing.BorderFactory.createBevelBorder(javax.swing.border.BevelBorder.RAISED));
+        btnActualizar.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent evt) {
-                jButton2ActionPerformed(evt);
+                btnActualizarActionPerformed(evt);
             }
         });
 
@@ -159,16 +197,16 @@ public class GraficoGlucosa extends javax.swing.JFrame {
                                 .addGap(54, 54, 54)
                                 .addComponent(jLabel2, javax.swing.GroupLayout.PREFERRED_SIZE, 85, javax.swing.GroupLayout.PREFERRED_SIZE)
                                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                                .addComponent(jLabel3, javax.swing.GroupLayout.PREFERRED_SIZE, 81, javax.swing.GroupLayout.PREFERRED_SIZE))
+                                .addComponent(statusLabel, javax.swing.GroupLayout.PREFERRED_SIZE, 81, javax.swing.GroupLayout.PREFERRED_SIZE))
                             .addComponent(jLabel9))
                         .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
                     .addGroup(jPanel1Layout.createSequentialGroup()
                         .addGap(20, 20, 20)
-                        .addComponent(jButton3, javax.swing.GroupLayout.PREFERRED_SIZE, 120, javax.swing.GroupLayout.PREFERRED_SIZE)
+                        .addComponent(insertButton, javax.swing.GroupLayout.PREFERRED_SIZE, 120, javax.swing.GroupLayout.PREFERRED_SIZE)
                         .addGap(18, 18, 18)
-                        .addComponent(jButton1, javax.swing.GroupLayout.PREFERRED_SIZE, 122, javax.swing.GroupLayout.PREFERRED_SIZE)
+                        .addComponent(readButton, javax.swing.GroupLayout.PREFERRED_SIZE, 122, javax.swing.GroupLayout.PREFERRED_SIZE)
                         .addGap(18, 18, 18)
-                        .addComponent(jButton2, javax.swing.GroupLayout.PREFERRED_SIZE, 121, javax.swing.GroupLayout.PREFERRED_SIZE)
+                        .addComponent(btnActualizar, javax.swing.GroupLayout.PREFERRED_SIZE, 121, javax.swing.GroupLayout.PREFERRED_SIZE)
                         .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
                         .addComponent(jButton5, javax.swing.GroupLayout.PREFERRED_SIZE, 102, javax.swing.GroupLayout.PREFERRED_SIZE)
                         .addGap(20, 20, 20))))
@@ -181,14 +219,14 @@ public class GraficoGlucosa extends javax.swing.JFrame {
                         .addComponent(jLabel9, javax.swing.GroupLayout.PREFERRED_SIZE, 29, javax.swing.GroupLayout.PREFERRED_SIZE)
                         .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                         .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
-                            .addComponent(jButton3, javax.swing.GroupLayout.PREFERRED_SIZE, 42, javax.swing.GroupLayout.PREFERRED_SIZE)
-                            .addComponent(jButton1, javax.swing.GroupLayout.PREFERRED_SIZE, 42, javax.swing.GroupLayout.PREFERRED_SIZE)
-                            .addComponent(jButton2, javax.swing.GroupLayout.PREFERRED_SIZE, 42, javax.swing.GroupLayout.PREFERRED_SIZE)
+                            .addComponent(insertButton, javax.swing.GroupLayout.PREFERRED_SIZE, 42, javax.swing.GroupLayout.PREFERRED_SIZE)
+                            .addComponent(readButton, javax.swing.GroupLayout.PREFERRED_SIZE, 42, javax.swing.GroupLayout.PREFERRED_SIZE)
+                            .addComponent(btnActualizar, javax.swing.GroupLayout.PREFERRED_SIZE, 42, javax.swing.GroupLayout.PREFERRED_SIZE)
                             .addComponent(jButton5, javax.swing.GroupLayout.PREFERRED_SIZE, 42, javax.swing.GroupLayout.PREFERRED_SIZE))
                         .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
                         .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
                             .addComponent(jLabel2, javax.swing.GroupLayout.PREFERRED_SIZE, 35, javax.swing.GroupLayout.PREFERRED_SIZE)
-                            .addComponent(jLabel3, javax.swing.GroupLayout.PREFERRED_SIZE, 35, javax.swing.GroupLayout.PREFERRED_SIZE)))
+                            .addComponent(statusLabel, javax.swing.GroupLayout.PREFERRED_SIZE, 35, javax.swing.GroupLayout.PREFERRED_SIZE)))
                     .addGroup(jPanel1Layout.createSequentialGroup()
                         .addComponent(jLabel1, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
                         .addGap(12, 12, 12)))
@@ -213,21 +251,21 @@ public class GraficoGlucosa extends javax.swing.JFrame {
         pack();
     }// </editor-fold>//GEN-END:initComponents
 
-    private void jButton3ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton3ActionPerformed
-        // TODO add your handling code here:
-    }//GEN-LAST:event_jButton3ActionPerformed
+    private void insertButtonActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_insertButtonActionPerformed
+        insertSelectedReadings();
+    }//GEN-LAST:event_insertButtonActionPerformed
 
     private void jButton5ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton5ActionPerformed
         dispose();
     }//GEN-LAST:event_jButton5ActionPerformed
 
-    private void jButton1ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton1ActionPerformed
-        // TODO add your handling code here:
-    }//GEN-LAST:event_jButton1ActionPerformed
+    private void readButtonActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_readButtonActionPerformed
+        readGlucoseData();
+    }//GEN-LAST:event_readButtonActionPerformed
 
-    private void jButton2ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton2ActionPerformed
-        // TODO add your handling code here:
-    }//GEN-LAST:event_jButton2ActionPerformed
+    private void btnActualizarActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnActualizarActionPerformed
+        actualizarDatos();
+    }//GEN-LAST:event_btnActualizarActionPerformed
 
     /**
      * @param args the command line arguments
@@ -272,18 +310,270 @@ public class GraficoGlucosa extends javax.swing.JFrame {
         });
     }
 
+    private void initializeHID() {
+        SwingWorker<Void, Void> worker = new SwingWorker<Void, Void>() {
+            @Override
+            protected Void doInBackground() throws Exception {
+                hidServices = HidManager.getHidServices();
+                hidServices.start();
+
+                int vendorId = 0x1a79;
+                int productId = 0x7410;
+                hidDevice = hidServices.getHidDevice(vendorId, productId, null);
+                return null;
+            }
+
+            @Override
+            protected void done() {
+                if (hidDevice != null) {
+                    statusLabel.setText("Conectado");
+                    readButton.setEnabled(true);
+                }
+            }
+        }; /*Prueba para push*/
+
+        worker.execute();
+    }
+
+    private void setupEventHandlers() {
+        readButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                readGlucoseData();
+            }
+        });
+
+        insertButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                insertSelectedReadings();
+            }
+        });
+        readButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                readGlucoseData();
+            }
+        });
+
+        insertButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                insertSelectedReadings();
+            }
+        });
+
+        btnActualizar.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                actualizarDatos();
+            }
+        });
+    }
+
+    private void readGlucoseData() {
+        readButton.setEnabled(false);
+        statusLabel.setText("Leyendo...");
+
+        SwingWorker<List<GlucoseReading>, Void> worker = new SwingWorker<List<GlucoseReading>, Void>() {
+            @Override
+            protected List<GlucoseReading> doInBackground() throws Exception {
+                List<GlucoseReading> readings = new ArrayList<>();
+                if (hidDevice != null && hidDevice.open()) {
+                    try {
+                        // Enviar comandos y leer datos
+                        sendCommand(INIT_COMMAND);
+                        Thread.sleep(1000);
+                        sendCommand(REQUEST_DATA);
+
+                        byte[] response = readResponse();
+                        if (response != null) {
+                            readings = processData(response);
+                        }
+                    } finally {
+                        hidDevice.close();
+                    }
+                }
+                return readings;
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    List<GlucoseReading> readings = get();
+                    updateTable(readings);
+                    statusLabel.setText("Conectado");
+                    insertButton.setEnabled(true);
+                } catch (Exception e) {
+                    statusLabel.setText("Error");
+                    e.printStackTrace();
+                }
+                readButton.setEnabled(true);
+            }
+        };
+        worker.execute();
+    }
+
+    private boolean sendCommand(byte[] command) throws Exception {
+        byte[] packet = new byte[PACKET_SIZE];
+        System.arraycopy(command, 0, packet, 0, command.length);
+        return hidDevice.write(packet, packet.length, (byte) 0x00) >= 0;
+    }
+
+    private byte[] readResponse() {
+        byte[] response = new byte[PACKET_SIZE];
+        return hidDevice.read(response, 2000) > 0 ? response : null;
+    }
+
+    private List<GlucoseReading> processData(byte[] data) {
+        List<GlucoseReading> readings = new ArrayList<>();
+        if (data.length >= 3) {
+            int recordCount = data[2] & 0xFF;
+            int offset = 3;
+            for (int i = 0; i < recordCount && offset + 2 < data.length; i++) {
+                int glucoseValue = ((data[offset] & 0xFF) << 8) | (data[offset + 1] & 0xFF);
+                readings.add(new GlucoseReading(i + 1, new Date(), glucoseValue));
+                offset += 3;
+            }
+        }
+        return readings;
+    }
+
+    private void updateTable(List<GlucoseReading> readings) {
+        DefaultTableModel model = (DefaultTableModel) tableModel.getModel();
+        model.setRowCount(0);
+        SimpleDateFormat dateFormat = new SimpleDateFormat("dd/MM/yyyy HH:mm:ss");
+        for (GlucoseReading reading : readings) {
+            Object[] row = {
+                false,
+                reading.id,
+                dateFormat.format(reading.timestamp),
+                reading.value
+            };
+            model.addRow(row);
+        }
+    }
+
+    // Previous constants and fields remain the same...
+    private void insertSelectedReadings() {
+        List<GlucoseReading> selectedReadings = new ArrayList<>();
+        for (int i = 0; i < tableModel.getRowCount(); i++) {
+            Boolean isSelected = (Boolean) tableModel.getValueAt(i, 0);
+            if (isSelected) {
+                int id = (int) tableModel.getValueAt(i, 1);
+                Date timestamp = null;
+                try {
+                    timestamp = new SimpleDateFormat("dd/MM/yyyy HH:mm:ss").parse((String) tableModel.getValueAt(i, 2));
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+                int value = (int) tableModel.getValueAt(i, 3);
+                selectedReadings.add(new GlucoseReading(id, timestamp, value));
+            }
+        }
+
+        Connection conn = null;
+        PreparedStatement checkStmt = null;
+        PreparedStatement insertStmt = null;
+        PreparedStatement insertLectorStmt = null;
+        int insertedCount = 0;
+
+        try {
+            conn = Conexion.getConnection();
+            conn.setAutoCommit(false);
+
+            // Verificar si el registro ya existe
+            String checkSql = "SELECT COUNT(*) FROM registro_glucosa WHERE nro_registro = ? AND lectura_glucosa = ?";
+            checkStmt = conn.prepareStatement(checkSql);
+
+            // Insertar en registro_glucosa
+            String insertSql = "INSERT INTO registro_glucosa (nro_registro, lectura_glucosa) VALUES (?, ?)";
+            insertStmt = conn.prepareStatement(insertSql, Statement.RETURN_GENERATED_KEYS);
+
+            // Insertar en registro_de_lector
+            String insertLectorSql = "INSERT INTO registro_de_lector (nro_registro_de_lector, cantidad_lector_lectura, cantidad_despues_de_lectura) VALUES (?, ?, ?)";
+            insertLectorStmt = conn.prepareStatement(insertLectorSql);
+
+            for (GlucoseReading reading : selectedReadings) {
+                // Verificar si el registro ya existe
+                checkStmt.setInt(1, reading.id);
+                checkStmt.setString(2, String.valueOf(reading.value));
+                ResultSet rs = checkStmt.executeQuery();
+                rs.next();
+                int count = rs.getInt(1);
+
+                if (count == 0) {
+                    // Insertar en registro_glucosa
+                    insertStmt.setInt(1, reading.id);
+                    insertStmt.setString(2, String.valueOf(reading.value));
+                    insertStmt.executeUpdate();
+
+                    // Insertar en registro_de_lector
+                    insertLectorStmt.setInt(1, reading.id);
+                    insertLectorStmt.setInt(2, 1); // cantidad_lector_lectura
+                    insertLectorStmt.setInt(3, 0); // cantidad_despues_de_lectura
+                    insertLectorStmt.executeUpdate();
+
+                    insertedCount++;
+                }
+            }
+
+            conn.commit();
+            JOptionPane.showMessageDialog(this,
+                    "Se insertaron " + insertedCount + " nuevos registros en la base de datos.",
+                    "Inserción Exitosa",
+                    JOptionPane.INFORMATION_MESSAGE);
+
+        } catch (SQLException e) {
+            if (conn != null) {
+                try {
+                    conn.rollback();
+                } catch (SQLException ex) {
+                    ex.printStackTrace();
+                }
+            }
+            JOptionPane.showMessageDialog(this,
+                    "Error al insertar registros: " + e.getMessage(),
+                    "Error de Inserción",
+                    JOptionPane.ERROR_MESSAGE);
+            e.printStackTrace();
+        } finally {
+            try {
+                if (checkStmt != null) {
+                    checkStmt.close();
+                }
+                if (insertStmt != null) {
+                    insertStmt.close();
+                }
+                if (insertLectorStmt != null) {
+                    insertLectorStmt.close();
+                }
+                if (conn != null) {
+                    conn.setAutoCommit(true);
+                    conn.close();
+                }
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    private void actualizarDatos() {
+        JOptionPane.showMessageDialog(this, "Actualizando datos...", "Actualización", JOptionPane.INFORMATION_MESSAGE);
+        readGlucoseData();
+    }
     // Variables declaration - do not modify//GEN-BEGIN:variables
-    private javax.swing.JButton jButton1;
-    private javax.swing.JButton jButton2;
-    private javax.swing.JButton jButton3;
+    private javax.swing.JButton btnActualizar;
+    private javax.swing.JButton insertButton;
     private javax.swing.JButton jButton5;
     private javax.swing.JInternalFrame jInternalFrame1;
     private javax.swing.JLabel jLabel1;
     private javax.swing.JLabel jLabel2;
-    private javax.swing.JLabel jLabel3;
     private javax.swing.JLabel jLabel9;
     private javax.swing.JPanel jPanel1;
     private javax.swing.JScrollPane jScrollPane1;
-    private javax.swing.JTable jTable1;
+    private javax.swing.JButton readButton;
+    private javax.swing.JLabel statusLabel;
+    private javax.swing.JTable tableModel;
     // End of variables declaration//GEN-END:variables
 }

@@ -4,18 +4,17 @@ import org.hid4java.*;
 import java.io.BufferedWriter;
 import java.io.FileWriter;
 import java.io.IOException;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
 
 public class GlucoseMeterReader {
+
     private static final byte[] INIT_COMMAND = {0x55, 0x55, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
     private static final byte[] REQUEST_DATA = {0x51, 0x26, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
     private static final int PACKET_SIZE = 64;
 
     public static void main(String[] args) {
         HidServices hidServices = HidManager.getHidServices();
-        
+
         if (hidServices == null) {
             System.err.println("Error al crear los servicios HID.");
             return;
@@ -41,11 +40,11 @@ public class GlucoseMeterReader {
     }
 
     private static void processGlucoseMeter(HidDevice device) {
-        String fileName = "glucose_data_" + getCurrentDateTime() + ".txt";
+        String fileName = "glucose_data_" + ".txt";
         String filePath = System.getProperty("user.home") + "/Desktop/" + fileName;
-        
+
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(filePath))) {
-            writer.write("Datos del Medidor de Glucosa - " + getCurrentDateTime() + "\n\n");
+            writer.write("Datos del Medidor de Glucosa - " + "\n\n");
 
             if (!device.open()) {
                 writer.write("No se pudo abrir el dispositivo.\n");
@@ -96,14 +95,14 @@ public class GlucoseMeterReader {
         } catch (IOException | InterruptedException e) {
             e.printStackTrace();
         }
-        
+
         System.out.println("Proceso completado. Datos guardados en: " + filePath);
     }
 
     private static boolean sendCommand(HidDevice device, byte[] command, BufferedWriter writer) throws IOException {
         byte[] packet = new byte[PACKET_SIZE];
         System.arraycopy(command, 0, packet, 0, command.length);
-        
+
         writer.write("Enviando comando: " + bytesToHex(command) + "\n");
         int result = device.write(packet, packet.length, (byte) 0x00);
         if (result < 0) {
@@ -117,7 +116,7 @@ public class GlucoseMeterReader {
     private static byte[] readResponse(HidDevice device) {
         byte[] response = new byte[PACKET_SIZE];
         int bytesRead = device.read(response, 2000);
-        
+
         if (bytesRead > 0) {
             return response;
         }
@@ -131,21 +130,21 @@ public class GlucoseMeterReader {
 
         if (data.length >= 3) {
             writer.write("Byte de inicio: 0x" + String.format("%02X", data[0]) + "\n");
-        
+
             writer.write("Segundo byte: 0x" + String.format("%02X", data[1]) + "\n");
-        
+
             int recordCount = data[2] & 0xFF;
 
             writer.write("Datos de glucosa:\n");
             System.out.println("Datos de glucosa:");
-        
+
             int offset = 3;
             for (int i = 0; i < recordCount && offset + 2 < data.length; i++) {
                 int glucoseValue = ((data[offset] & 0xFF) << 8) | (data[offset + 1] & 0xFF);
                 String hexValue = String.format("%02X%02X", data[offset], data[offset + 1]);
-                writer.write("  Registro " + (i+1) + ": 0x" + hexValue + " = " + glucoseValue + " mg/dL\n");
-                System.out.println("  Registro " + (i+1) + ": 0x" + hexValue + " = " + glucoseValue + " mg/dL");
-                offset += 3; 
+                writer.write("  Registro " + (i + 1) + ": 0x" + hexValue + " = " + glucoseValue + " mg/dL\n");
+                System.out.println("  Registro " + (i + 1) + ": 0x" + hexValue + " = " + glucoseValue + " mg/dL");
+                offset += 3;
             }
 
             if (offset < data.length) {
@@ -154,7 +153,7 @@ public class GlucoseMeterReader {
         } else {
             writer.write("El paquete recibido es demasiado corto para ser válido.\n");
         }
-    
+
         writer.write("\n");
         writer.flush();
     }
@@ -167,9 +166,5 @@ public class GlucoseMeterReader {
         return sb.toString().trim();
     }
 
-    private static String getCurrentDateTime() {
-        LocalDateTime now = LocalDateTime.now();
-        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss");
-        return now.format(formatter);
-    }
+
 }
