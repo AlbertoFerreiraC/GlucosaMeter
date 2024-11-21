@@ -18,7 +18,9 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import javax.swing.JOptionPane;
+import javax.swing.SwingConstants;
 import javax.swing.SwingWorker;
+import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
 import org.hid4java.HidDevice;
 import org.hid4java.HidManager;
@@ -59,7 +61,7 @@ public class GraficoGlucosa extends javax.swing.JFrame {
     public GraficoGlucosa() {
         initComponents();
         setLocationRelativeTo(null);
-         // Configurar el modelo de tabla con el tipo correcto para la columna del checkbox
+        // Configurar el modelo de tabla con el tipo correcto para la columna del checkbox
         String[] columnNames = {"Seleccionar", "Id", "Fecha de Lectura", "Nivel de glucosa mg/dl"};
         mt = new DefaultTableModel(columnNames, 0) {
             @Override
@@ -70,7 +72,7 @@ public class GraficoGlucosa extends javax.swing.JFrame {
                 }
                 return Object.class;
             }
-            
+
             @Override
             public boolean isCellEditable(int row, int column) {
                 // Solo permitir edición en la columna del checkbox
@@ -79,11 +81,10 @@ public class GraficoGlucosa extends javax.swing.JFrame {
         };
 
         tableModel.setModel(mt);
-        
+
         // Configurar el renderizador para la columna del checkbox
         tableModel.getColumnModel().getColumn(0).setPreferredWidth(45);
         tableModel.getColumnModel().getColumn(0).setResizable(false);
-
 
         // Inicializar HID y configurar eventos
         initializeHID();
@@ -157,7 +158,7 @@ public class GraficoGlucosa extends javax.swing.JFrame {
                 {null, null, null, null, null}
             },
             new String [] {
-                "Title 1", "Title 3", "Title 4", "Título 4", "Título 5"
+                "Title 3", "Title 1", "Title 4", "Título 4", "Título 5"
             }
         ));
         tableModel.setAutoscrolls(false);
@@ -351,7 +352,8 @@ public class GraficoGlucosa extends javax.swing.JFrame {
                     readButton.setEnabled(true);
                 }
             }
-        }; /*Prueba para push*/
+        };
+        /*Prueba para push*/
 
         worker.execute();
     }
@@ -508,11 +510,11 @@ public class GraficoGlucosa extends javax.swing.JFrame {
             checkStmt = conn.prepareStatement(checkSql);
 
             // Insertar en registro_glucosa
-            String insertSql = "INSERT INTO registro_glucosa (nro_registro, lectura_glucosa) VALUES (?, ?)";
+            String insertSql = "INSERT INTO `medic`.`registro_glucosa` (`nro_registro`, `lectura_glucosa`) VALUES(?,?);";
             insertStmt = conn.prepareStatement(insertSql, Statement.RETURN_GENERATED_KEYS);
 
             // Insertar en registro_de_lector
-            String insertLectorSql = "INSERT INTO registro_de_lector (nro_registro_de_lector, cantidad_lector_lectura, cantidad_despues_de_lectura) VALUES (?, ?, ?)";
+            String insertLectorSql = "INSERT INTO `medic`.`registros_de_lector` (`cantidad_antes_lectura`, `cantidad_despues_de_lectura`) VALUES(?,?);";
             insertLectorStmt = conn.prepareStatement(insertLectorSql);
 
             for (GlucoseReading reading : selectedReadings) {
