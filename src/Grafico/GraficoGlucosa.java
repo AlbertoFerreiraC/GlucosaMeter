@@ -1,13 +1,9 @@
-/*
- * To change this license header, choose License Headers in Project Properties.
- * To change this template file, choose Tools | Templates
- * and open the template in the editor.
- */
 package Grafico;
 
 import Conexion.Conexion;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -31,6 +27,10 @@ import org.hid4java.HidServices;
  * @author Usuario
  */
 public class GraficoGlucosa extends javax.swing.JFrame {
+
+    static {
+        System.setProperty("org.hid4java.logLevel", "DEBUG");
+    }
 
     DefaultTableModel mt = new DefaultTableModel();
 
@@ -342,56 +342,47 @@ public class GraficoGlucosa extends javax.swing.JFrame {
                 int vendorId = 0x1a79;
                 int productId = 0x7410;
                 hidDevice = hidServices.getHidDevice(vendorId, productId, null);
+
+                if (hidDevice != null) {
+                    // Intenta abrir el dispositivo solo si no está abierto
+                    if (!hidDevice.isOpen()) {
+                        try {
+                            hidDevice.open();
+                        } catch (Exception e) {
+                            throw new IllegalStateException("No se pudo abrir el dispositivo HID: " + e.getMessage());
+                        }
+                    }
+                } else {
+                    throw new IllegalStateException("No se encontró el dispositivo HID.");
+                }
+
                 return null;
             }
 
             @Override
             protected void done() {
-                if (hidDevice != null) {
-                    statusLabel.setText("Conectado");
-                    readButton.setEnabled(true);
+                try {
+                    // Verifica si el dispositivo fue inicializado correctamente
+                    if (hidDevice != null && hidDevice.isOpen()) {
+                        statusLabel.setText("Conectado");
+                        readButton.setEnabled(true);
+                    } else {
+                        statusLabel.setText("Error al conectar");
+                        readButton.setEnabled(false);
+                    }
+                } catch (Exception e) {
+                    statusLabel.setText("Error: " + e.getMessage());
+                    readButton.setEnabled(false);
                 }
             }
         };
-        /*Prueba para push*/
-
         worker.execute();
     }
 
     private void setupEventHandlers() {
-        readButton.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                readGlucoseData();
-            }
-        });
-
-        insertButton.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                insertSelectedReadings();
-            }
-        });
-        readButton.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                readGlucoseData();
-            }
-        });
-
-        insertButton.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                insertSelectedReadings();
-            }
-        });
-
-        btnActualizar.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                actualizarDatos();
-            }
-        });
+        readButton.addActionListener(e -> readGlucoseData());
+        insertButton.addActionListener(e -> insertSelectedReadings());
+        btnActualizar.addActionListener(e -> actualizarDatos());
     }
 
     private void readGlucoseData() {
@@ -402,9 +393,19 @@ public class GraficoGlucosa extends javax.swing.JFrame {
             @Override
             protected List<GlucoseReading> doInBackground() throws Exception {
                 List<GlucoseReading> readings = new ArrayList<>();
-                if (hidDevice != null && hidDevice.open()) {
+                if (hidDevice != null) {
+                    if (!hidDevice.isOpen()) {
+                        boolean success = hidDevice.open();
+                        if (!success) {
+                            throw new IllegalStateException("No se pudo abrir el dispositivo.");
+                        }
+                    }
+
                     try {
-                        // Enviar comandos y leer datos
+                        if (!hidDevice.isOpen()) {
+                            throw new IllegalStateException("El dispositivo no está abierto después de open()");
+                        }
+
                         sendCommand(INIT_COMMAND);
                         Thread.sleep(1000);
                         sendCommand(REQUEST_DATA);
@@ -413,9 +414,13 @@ public class GraficoGlucosa extends javax.swing.JFrame {
                         if (response != null) {
                             readings = processData(response);
                         }
+                    } catch (Exception e) {
+                        throw new IllegalStateException("Error durante la comunicación con el dispositivo", e);
                     } finally {
                         hidDevice.close();
                     }
+                } else {
+                    throw new IllegalStateException("Dispositivo HID no inicializado.");
                 }
                 return readings;
             }
@@ -429,6 +434,7 @@ public class GraficoGlucosa extends javax.swing.JFrame {
                     insertButton.setEnabled(true);
                 } catch (Exception e) {
                     statusLabel.setText("Error");
+                    JOptionPane.showMessageDialog(null, "Hubo un error al leer los datos: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
                     e.printStackTrace();
                 }
                 readButton.setEnabled(true);
@@ -438,9 +444,18 @@ public class GraficoGlucosa extends javax.swing.JFrame {
     }
 
     private boolean sendCommand(byte[] command) throws Exception {
+        // Verifica si el comando no excede el tamaño del paquete
+        if (command.length > PACKET_SIZE) {
+            throw new IllegalArgumentException("El comando excede el tamaño máximo del paquete.");
+        }
         byte[] packet = new byte[PACKET_SIZE];
         System.arraycopy(command, 0, packet, 0, command.length);
-        return hidDevice.write(packet, packet.length, (byte) 0x00) >= 0;
+        int bytesWritten = hidDevice.write(packet, packet.length, (byte) 0x00);
+        if (bytesWritten >= 0) {
+            return true;
+        } else {
+            throw new IOException("Error al enviar el comando al dispositivo HID.");
+        }
     }
 
     private byte[] readResponse() {
@@ -477,7 +492,6 @@ public class GraficoGlucosa extends javax.swing.JFrame {
         }
     }
 
-    // Previous constants and fields remain the same...
     private void insertSelectedReadings() {
         List<GlucoseReading> selectedReadings = new ArrayList<>();
         for (int i = 0; i < tableModel.getRowCount(); i++) {
@@ -505,7 +519,7 @@ public class GraficoGlucosa extends javax.swing.JFrame {
             conn = Conexion.getConnection();
             conn.setAutoCommit(false);
 
-            // Verificar si el registro ya existe
+            // Verificar que el registro no exista
             String checkSql = "SELECT COUNT(*) FROM registro_glucosa WHERE nro_registro = ? AND lectura_glucosa = ?";
             checkStmt = conn.prepareStatement(checkSql);
 
@@ -520,24 +534,26 @@ public class GraficoGlucosa extends javax.swing.JFrame {
             for (GlucoseReading reading : selectedReadings) {
                 // Verificar si el registro ya existe
                 checkStmt.setInt(1, reading.id);
-                checkStmt.setString(2, String.valueOf(reading.value));
-                ResultSet rs = checkStmt.executeQuery();
-                rs.next();
-                int count = rs.getInt(1);
+                checkStmt.setInt(2, reading.value); // Se usa int en lugar de String
+                try (ResultSet rs = checkStmt.executeQuery()) {
+                    rs.next();
+                    int count = rs.getInt(1);
 
-                if (count == 0) {
-                    // Insertar en registro_glucosa
-                    insertStmt.setInt(1, reading.id);
-                    insertStmt.setString(2, String.valueOf(reading.value));
-                    insertStmt.executeUpdate();
+                    if (count == 0) {
+                        // Insertar en registro_glucosa
+                        insertStmt.setInt(1, reading.id);
+                        insertStmt.setInt(2, reading.value); // Se usa int en lugar de String
+                        insertStmt.executeUpdate();
 
-                    // Insertar en registro_de_lector
-                    insertLectorStmt.setInt(1, reading.id);
-                    insertLectorStmt.setInt(2, 1); // cantidad_lector_lectura
-                    insertLectorStmt.setInt(3, 0); // cantidad_despues_de_lectura
-                    insertLectorStmt.executeUpdate();
+                        // Insertar en registro_de_lector
+                        insertLectorStmt.setInt(1, reading.value); // cantidad_antes_lectura
+                        insertLectorStmt.setInt(2, 0); // cantidad_despues_de_lectura (se mantiene como 0 por ahora)
+                        insertLectorStmt.executeUpdate();
 
-                    insertedCount++;
+                        insertedCount++;
+                    }
+                } catch (SQLException ex) {
+                    ex.printStackTrace();
                 }
             }
 
@@ -562,6 +578,7 @@ public class GraficoGlucosa extends javax.swing.JFrame {
             e.printStackTrace();
         } finally {
             try {
+                // Cerrar las declaraciones y la conexión
                 if (checkStmt != null) {
                     checkStmt.close();
                 }
@@ -572,6 +589,7 @@ public class GraficoGlucosa extends javax.swing.JFrame {
                     insertLectorStmt.close();
                 }
                 if (conn != null) {
+                    // Solo cerramos la conexión después de que se haya completado todo
                     conn.setAutoCommit(true);
                     conn.close();
                 }
@@ -585,6 +603,7 @@ public class GraficoGlucosa extends javax.swing.JFrame {
         JOptionPane.showMessageDialog(this, "Actualizando datos...", "Actualización", JOptionPane.INFORMATION_MESSAGE);
         readGlucoseData();
     }
+
     // Variables declaration - do not modify//GEN-BEGIN:variables
     private javax.swing.JButton btnActualizar;
     private javax.swing.JButton insertButton;
