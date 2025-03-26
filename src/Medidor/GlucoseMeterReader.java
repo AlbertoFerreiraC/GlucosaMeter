@@ -5,12 +5,14 @@ import java.io.BufferedWriter;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.util.Arrays;
+import java.text.DecimalFormat;
 
 public class GlucoseMeterReader {
 
     private static final byte[] INIT_COMMAND = {0x55, 0x55, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
     private static final byte[] REQUEST_DATA = {0x51, 0x26, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
     private static final int PACKET_SIZE = 64;
+    private static final double CONVERSION_FACTOR = 18.0182; // Factor para convertir mg/dL a mmol/L
 
     public static void main(String[] args) {
         HidServices hidServices = HidManager.getHidServices();
@@ -40,11 +42,11 @@ public class GlucoseMeterReader {
     }
 
     private static void processGlucoseMeter(HidDevice device) {
-        String fileName = "glucose_data_" + ".txt";
+        String fileName = "glucose_data_" + System.currentTimeMillis() + ".txt";
         String filePath = System.getProperty("user.home") + "/Desktop/" + fileName;
 
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(filePath))) {
-            writer.write("Datos del Medidor de Glucosa - " + "\n\n");
+            writer.write("Datos del Medidor de Glucosa - " + java.time.LocalDate.now() + "\n\n");
 
             if (!device.open()) {
                 writer.write("No se pudo abrir el dispositivo.\n");
@@ -125,26 +127,91 @@ public class GlucoseMeterReader {
 
     private static void processAndSaveData(byte[] data, BufferedWriter writer) throws IOException {
         writer.write("Datos recibidos (HEX): " + bytesToHex(data) + "\n");
-
         writer.write("Análisis detallado del paquete:\n");
 
         if (data.length >= 3) {
             writer.write("Byte de inicio: 0x" + String.format("%02X", data[0]) + "\n");
-
             writer.write("Segundo byte: 0x" + String.format("%02X", data[1]) + "\n");
 
-            int recordCount = data[2] & 0xFF;
-
-            writer.write("Datos de glucosa:\n");
-            System.out.println("Datos de glucosa:");
-
+            // Declarar offset aquí, antes de los bloques condicionales
             int offset = 3;
-            for (int i = 0; i < recordCount && offset + 2 < data.length; i++) {
-                int glucoseValue = ((data[offset] & 0xFF) << 8) | (data[offset + 1] & 0xFF);
-                String hexValue = String.format("%02X%02X", data[offset], data[offset + 1]);
-                writer.write("  Registro " + (i + 1) + ": 0x" + hexValue + " = " + glucoseValue + " mg/dL\n");
-                System.out.println("  Registro " + (i + 1) + ": 0x" + hexValue + " = " + glucoseValue + " mg/dL");
-                offset += 3;
+            DecimalFormat df = new DecimalFormat("#.##");
+
+            // Verificar si los primeros bytes son "ABC" (0x41 0x42 0x43)
+            if (data[0] == 0x41 && data[1] == 0x42 && data[2] == 0x43) {
+                // Este parece ser el formato de respuesta del dispositivo
+                int recordCount = data[3] & 0xFF; // El cuarto byte podría indicar el número de registros
+
+                writer.write("Número de registros: " + recordCount + "\n");
+                writer.write("Datos de glucosa:\n");
+                System.out.println("Datos de glucosa:");
+
+                // Comenzamos desde el byte 4 (índice 3)
+                offset = 4;
+
+                for (int i = 0; i < recordCount && offset + 1 < data.length; i++) {
+                    // Extraer el valor de glucosa (2 bytes)
+                    int glucoseValue = ((data[offset] & 0xFF) << 8) | (data[offset + 1] & 0xFF);
+
+                    // Verificar si el valor es razonable (entre 20 y 600 mg/dL)
+                    if (glucoseValue > 600) {
+                    // Si el valor es demasiado alto, podría ser que necesitemos interpretar los bytes de otra manera
+                        // Intentemos con solo el primer byte como valor
+                        glucoseValue = data[offset] & 0xFF;
+                    }
+
+                    // Convertir a mmol/L
+                    double mmolValue = glucoseValue / CONVERSION_FACTOR;
+
+                    String hexValue = String.format("%02X%02X", data[offset], data[offset + 1]);
+                    writer.write("  Registro " + (i + 1) + ": 0x" + hexValue
+                            + " = " + glucoseValue + " mg/dL = "
+                            + df.format(mmolValue) + " mmol/L\n");
+
+                    System.out.println("  Registro " + (i + 1) + ": 0x" + hexValue
+                            + " = " + glucoseValue + " mg/dL = "
+                            + df.format(mmolValue) + " mmol/L");
+
+                    // Avanzamos 2 bytes para el siguiente valor
+                    offset += 2;
+
+                    // Si hay un tercer byte por registro (como un separador o información adicional)
+                    if (i < recordCount - 1 && offset < data.length) {
+                        writer.write("    Byte adicional: 0x" + String.format("%02X", data[offset]) + "\n");
+                        offset++;
+                    }
+                }
+            } else {
+                // Formato alternativo - intentar interpretar como se hacía originalmente
+                int recordCount = data[2] & 0xFF;
+
+                writer.write("Número de registros: " + recordCount + "\n");
+                writer.write("Datos de glucosa:\n");
+                System.out.println("Datos de glucosa:");
+
+                for (int i = 0; i < recordCount && offset + 1 < data.length; i++) {
+                    int glucoseValue = ((data[offset] & 0xFF) << 8) | (data[offset + 1] & 0xFF);
+
+                    // Verificar si el valor es razonable
+                    if (glucoseValue > 600) {
+                        // Intentar interpretar de otra manera
+                        glucoseValue = data[offset] & 0xFF;
+                    }
+
+                    // Convertir a mmol/L
+                    double mmolValue = glucoseValue / CONVERSION_FACTOR;
+
+                    String hexValue = String.format("%02X%02X", data[offset], data[offset + 1]);
+                    writer.write("  Registro " + (i + 1) + ": 0x" + hexValue
+                            + " = " + glucoseValue + " mg/dL = "
+                            + df.format(mmolValue) + " mmol/L\n");
+
+                    System.out.println("  Registro " + (i + 1) + ": 0x" + hexValue
+                            + " = " + glucoseValue + " mg/dL = "
+                            + df.format(mmolValue) + " mmol/L");
+
+                    offset += 3; // Avanzar al siguiente registro
+                }
             }
 
             if (offset < data.length) {
@@ -165,6 +232,4 @@ public class GlucoseMeterReader {
         }
         return sb.toString().trim();
     }
-
-
 }
